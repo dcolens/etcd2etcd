@@ -1,0 +1,17 @@
+{
+  "name": "etcd2etcd",
+  "version": "1.0.0",
+  "description": "migrates data from etcd2 to etcd2",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "dcolens@gmail.com",
+  "license": "MIT",
+  "dependencies": {
+    "add-license": "^0.0.1",
+    "cli-progress": "^3.8.2",
+    "global": "^4.4.0",
+    "yargs": "^15.3.1"
+  }
+}
