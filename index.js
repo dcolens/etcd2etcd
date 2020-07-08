@@ -1,29 +1,6 @@
 /**
  * MIT License
  *
- * Copyright (c) 2020 Anonymous
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-/**
- * MIT License
- *
  * Copyright (c) 2020 Did
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -65,8 +42,6 @@ const argv = require('yargs')
 const source = argv.s;
 const dest = argv.d;
 
-console.log(argv.sslValidation === false);
-
 if (argv.sslValidation === false) {
   process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = 0;
 }
@@ -75,6 +50,8 @@ const multibar = new cliProgress.MultiBar(
   {
     clearOnComplete: false,
     hideCursor: false,
+    format:
+      '{name} [{bar}] {percentage}% | ETA: {eta}s | {value}/{total} {unit}',
   },
   cliProgress.Presets.shades_classic
 );
@@ -91,7 +68,10 @@ const get_source = (source, source_key, cb) => {
   request.get(`${source}/v2/keys${source_key}?recursive=true`, (res) => {
     const { statusCode } = res;
     const contentType = res.headers['content-type'];
-    const downloadProgressBar = multibar.create(8192, 0);
+    const downloadProgressBar = multibar.create(8192, 0, {
+      name: 'download',
+      unit: 'bytes',
+    });
 
     if (statusCode !== 200) {
       throw new Error('Request Failed.\n' + `Status Code: ${statusCode}`);
@@ -115,7 +95,15 @@ const get_source = (source, source_key, cb) => {
       downloadProgressBar.setTotal(size);
       downloadProgressBar.update(size);
       cb(parsedData);
-      uploadProgressBar = multibar.create(sent_count, 0);
+      uploadProgressBar = multibar.create(sent_count, 0, {
+        name: 'upload',
+        unit: 'keys',
+      });
+    });
+
+    res.on('error', () => {
+      console.error('read error', error);
+      process.exit();
     });
   });
 };
@@ -126,7 +114,9 @@ const create_destination_updater = (destination) => {
   const base_url = `${destination}/v2/keys`;
   const request = getHTTPClient(destination);
 
-  const agent = new request.Agent({ maxSockets: 10 });
+  const agent = new request.Agent({
+    maxSockets: 10,
+  });
 
   return (key, value = undefined, dir = false, ttl = 0) => {
     // dir: curl http://127.0.0.1:2379/v2/keys/dir -XPUT -d dir=true
@@ -163,12 +153,16 @@ const create_destination_updater = (destination) => {
       (res) => {
         const { statusCode, headers } = res;
         let rawData = '';
+        res.on('error', () => {
+          console.error('write res.error', error, data);
+        });
+
         res.on('data', (chunk) => {
           rawData += chunk;
         });
         res.on('end', () => {
           done_count += 1;
-          uploadProgressBar.update(done_count);
+          uploadProgressBar && uploadProgressBar.update(done_count);
           if (done_count === sent_count) {
             multibar.stop();
           }
@@ -199,6 +193,11 @@ const create_destination_updater = (destination) => {
       }
     );
     // Write data to request body
+    req.on('error', (error) => {
+      console.error('write req.error', error);
+      console.log(error.stack);
+      console.log(value);
+    });
     req.write(postData);
     req.end();
   };
@@ -219,7 +218,13 @@ const process_source_data = (data) => {
 };
 
 // manual test from a json dump of prod db
-// process_source_data(JSON.parse(fs.readFileSync("./vettel-etcd-1-dump-20200430.json"))
-//   .node);
+// const fs = require('fs');
+// process_source_data(
+//   JSON.parse(
+//     fs.readFileSync(
+//       '/Users/dcolens/development/bdb/etcd/vettel-etcd-1-dump-20200430.json'
+//     )
+//   ).node
+// );
 
 get_source(source, '/', process_source_data);
