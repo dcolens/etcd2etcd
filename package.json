@@ -1,6 +1,6 @@
 {
   "name": "etcd2etcd",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "migrates data from etcd2 to etcd2",
   "main": "index.js",
   "scripts": {
